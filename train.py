@@ -91,6 +91,10 @@ def get_args_parser(add_help=True):
     parser.add_argument("--test-only", dest="test_only", action="store_true", help="Only test the model")
     parser.add_argument("--pretrained", dest="pretrained", action="store_true", help="Use pre-trained models from the modelzoo")
 
+    # RetinaNet params
+    parser.add_argument('--min-size', default=800, type=int, help='minimum size of the image to be rescaled before feeding it to the backbone')
+    parser.add_argument('--max-size', default=1333, type=int, help='maximum size of the image to be rescaled before feeding it to the backbone')
+
     # distributed training parameters
     parser.add_argument('--world-size', default=1, type=int,
                         help='number of distributed processes')
@@ -144,6 +148,7 @@ def main(args):
         "trainable_backbone_layers": args.trainable_backbone_layers
     }
     model = torchvision.models.detection.__dict__[args.model](num_classes=num_classes, pretrained=args.pretrained,
+                                                              min_size=args.min_size, max_size=args.max_size,
                                                               **kwargs)
     model.to(device)
     if args.distributed and args.sync_bn:
