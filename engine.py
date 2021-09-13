@@ -8,7 +8,7 @@ from coco_eval import CocoEvaluator
 import utils
 
 
-def train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq):
+def train_one_epoch(model, optimizer, scaler, data_loader, device, epoch, args):
     model.train()
     metric_logger = utils.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
@@ -21,13 +21,14 @@ def train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq):
 
         lr_scheduler = utils.warmup_lr_scheduler(optimizer, warmup_iters, warmup_factor)
 
-    for images, targets in metric_logger.log_every(data_loader, print_freq, header):
+    for images, targets in metric_logger.log_every(data_loader, args.print_freq, header):
         images = list(image.to(device) for image in images)
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
 
-        loss_dict = model(images, targets)
 
-        losses = sum(loss for loss in loss_dict.values())
+        with torch.cuda.amp.autocast(enabled=args.amp):
+            loss_dict = model(images, targets)
+            losses = sum(loss for loss in loss_dict.values())
 
         # reduce losses over all GPUs for logging purposes
         loss_dict_reduced = utils.reduce_dict(loss_dict)
@@ -40,9 +41,10 @@ def train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq):
             print(loss_dict_reduced)
             sys.exit(1)
 
+        scaler.scale(losses).backward()
+        scaler.step(optimizer)
+        scaler.update()
         optimizer.zero_grad()
-        losses.backward()
-        optimizer.step()
 
         if lr_scheduler is not None:
             lr_scheduler.step()
@@ -54,7 +56,7 @@ def train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq):
 
 
 @torch.no_grad()
-def evaluate(model, data_loader, device):
+def evaluate(model, data_loader, device, args):
     n_threads = torch.get_num_threads()
     # FIXME remove this and make paste_masks_in_image run on the GPU
     torch.set_num_threads(1)
@@ -73,7 +75,8 @@ def evaluate(model, data_loader, device):
         if torch.cuda.is_available():
             torch.cuda.synchronize()
         model_time = time.time()
-        outputs = model(images)
+        with torch.cuda.amp.autocast(enabled=args.amp):
+            outputs = model(images)
 
         outputs = [{k: v.to(cpu_device) for k, v in t.items()} for t in outputs]
         model_time = time.time() - model_time

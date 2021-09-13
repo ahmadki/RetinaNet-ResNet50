@@ -88,6 +88,8 @@ def get_args_parser(add_help=True):
                         help='number of trainable layers of backbone')
     parser.add_argument('--data-augmentation', default="hflip", help='data augmentation policy (default: hflip)')
     parser.add_argument("--sync-bn", dest="sync_bn", action="store_true", help="Use sync batch norm")
+    parser.add_argument("--amp", action="store_true",
+                        help="Whether to enable Automatic Mixed Precision (AMP). When false, uses TF32 on A100 and FP32 on V100 GPUS.")
     parser.add_argument("--test-only", dest="test_only", action="store_true", help="Only test the model")
     parser.add_argument("--pretrained", dest="pretrained", action="store_true", help="Use pre-trained models from the modelzoo")
 
@@ -183,12 +185,15 @@ def main(args):
         evaluate(model, data_loader_test, device=device)
         return
 
+    # GradScaler for AMP
+    scaler = torch.cuda.amp.GradScaler(enabled=args.amp)
+
     print("Start training")
     start_time = time.time()
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             train_sampler.set_epoch(epoch)
-        train_one_epoch(model, optimizer, data_loader, device, epoch, args.print_freq)
+        train_one_epoch(model, optimizer, scaler, data_loader, device, epoch, args)
         lr_scheduler.step()
         if args.output_dir:
             checkpoint = {
@@ -206,7 +211,7 @@ def main(args):
                 os.path.join(args.output_dir, 'checkpoint.pth'))
 
         # evaluate after every epoch
-        evaluate(model, data_loader_test, device=device)
+        evaluate(model, data_loader_test, device=device, args=args)
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
