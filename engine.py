@@ -3,8 +3,6 @@ import sys
 import time
 import torch
 
-import torchvision.models.detection.mask_rcnn
-
 from coco_utils import get_coco_api_from_dataset
 from coco_eval import CocoEvaluator
 import utils
@@ -55,18 +53,6 @@ def train_one_epoch(model, optimizer, data_loader, device, epoch, print_freq):
     return metric_logger
 
 
-def _get_iou_types(model):
-    model_without_ddp = model
-    if isinstance(model, torch.nn.parallel.DistributedDataParallel):
-        model_without_ddp = model.module
-    iou_types = ["bbox"]
-    if isinstance(model_without_ddp, torchvision.models.detection.MaskRCNN):
-        iou_types.append("segm")
-    if isinstance(model_without_ddp, torchvision.models.detection.KeypointRCNN):
-        iou_types.append("keypoints")
-    return iou_types
-
-
 @torch.no_grad()
 def evaluate(model, data_loader, device):
     n_threads = torch.get_num_threads()
@@ -78,7 +64,7 @@ def evaluate(model, data_loader, device):
     header = 'Test:'
 
     coco = get_coco_api_from_dataset(data_loader.dataset)
-    iou_types = _get_iou_types(model)
+    iou_types = ["bbox"]
     coco_evaluator = CocoEvaluator(coco, iou_types)
 
     for images, targets in metric_logger.log_every(data_loader, 100, header):

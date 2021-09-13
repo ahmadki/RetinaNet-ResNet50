@@ -25,7 +25,6 @@ import torch
 import torch.utils.data
 import torchvision
 import torchvision.models.detection
-import torchvision.models.detection.mask_rcnn
 
 from coco_utils import get_coco, get_coco_kp
 
@@ -55,9 +54,9 @@ def get_args_parser(add_help=True):
     import argparse
     parser = argparse.ArgumentParser(description='PyTorch Detection Training', add_help=add_help)
 
-    parser.add_argument('--data-path', default='/datasets01/COCO/022719/', help='dataset')
+    parser.add_argument('--data-path', default='/datasets/coco2017', help='dataset')
     parser.add_argument('--dataset', default='coco', help='dataset')
-    parser.add_argument('--model', default='maskrcnn_resnet50_fpn', help='model')
+    parser.add_argument('--model', default='retinanet_resnet50_fpn', help='model')
     parser.add_argument('--device', default='cuda', help='device')
     parser.add_argument('-b', '--batch-size', default=2, type=int,
                         help='images per gpu, the total batch size is $NGPU x batch_size')
@@ -81,32 +80,16 @@ def get_args_parser(add_help=True):
     parser.add_argument('--lr-gamma', default=0.1, type=float,
                         help='decrease lr by a factor of lr-gamma (multisteplr scheduler only)')
     parser.add_argument('--print-freq', default=20, type=int, help='print frequency')
-    parser.add_argument('--output-dir', default='.', help='path where to save')
+    parser.add_argument('--output-dir', default='/results', help='path where to save')
     parser.add_argument('--resume', default='', help='resume from checkpoint')
     parser.add_argument('--start_epoch', default=0, type=int, help='start epoch')
     parser.add_argument('--aspect-ratio-group-factor', default=3, type=int)
-    parser.add_argument('--rpn-score-thresh', default=None, type=float, help='rpn score threshold for faster-rcnn')
     parser.add_argument('--trainable-backbone-layers', default=None, type=int,
                         help='number of trainable layers of backbone')
     parser.add_argument('--data-augmentation', default="hflip", help='data augmentation policy (default: hflip)')
-    parser.add_argument(
-        "--sync-bn",
-        dest="sync_bn",
-        help="Use sync batch norm",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--test-only",
-        dest="test_only",
-        help="Only test the model",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--pretrained",
-        dest="pretrained",
-        help="Use pre-trained models from the modelzoo",
-        action="store_true",
-    )
+    parser.add_argument("--sync-bn", dest="sync_bn", action="store_true", help="Use sync batch norm")
+    parser.add_argument("--test-only", dest="test_only", action="store_true", help="Only test the model")
+    parser.add_argument("--pretrained", dest="pretrained", action="store_true", help="Use pre-trained models from the modelzoo")
 
     # distributed training parameters
     parser.add_argument('--world-size', default=1, type=int,
@@ -160,9 +143,6 @@ def main(args):
     kwargs = {
         "trainable_backbone_layers": args.trainable_backbone_layers
     }
-    if "rcnn" in args.model:
-        if args.rpn_score_thresh is not None:
-            kwargs["rpn_score_thresh"] = args.rpn_score_thresh
     model = torchvision.models.detection.__dict__[args.model](num_classes=num_classes, pretrained=args.pretrained,
                                                               **kwargs)
     model.to(device)

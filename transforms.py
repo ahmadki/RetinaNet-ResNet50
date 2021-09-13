@@ -17,6 +17,49 @@ def _flip_coco_person_keypoints(kps, width):
     return flipped_data
 
 
+################################################################################
+# TODO(ahmadki): remove this block, and replace get_image_size with F.get_image_size
+#                once https://github.com/pytorch/vision/pull/4321 is public
+
+from PIL import Image, ImageOps, ImageEnhance
+from typing import Any
+
+try:
+    import accimage
+except ImportError:
+    accimage = None
+
+def get_image_size_tensor(img: Tensor) -> List[int]:
+    # Returns (w, h) of tensor image
+    _assert_image_tensor(img)
+    return [img.shape[-1], img.shape[-2]]
+
+@torch.jit.unused
+def _is_pil_image(img: Any) -> bool:
+    if accimage is not None:
+        return isinstance(img, (Image.Image, accimage.Image))
+    else:
+        return isinstance(img, Image.Image)
+
+@torch.jit.unused
+def get_image_size_pil(img: Any) -> List[int]:
+    if _is_pil_image(img):
+        return list(img.size)
+    raise TypeError("Unexpected type {}".format(type(img)))
+
+def get_image_size(img: Tensor) -> List[int]:
+    """Returns the size of an image as [width, height].
+    Args:
+        img (PIL Image or Tensor): The image to be checked.
+    Returns:
+        List[int]: The image size.
+    """
+    if isinstance(img, torch.Tensor):
+        return get_image_size_tensor(img)
+
+    return get_image_size_pil(img)
+################################################################################
+
 class Compose(object):
     def __init__(self, transforms):
         self.transforms = transforms
@@ -33,7 +76,7 @@ class RandomHorizontalFlip(T.RandomHorizontalFlip):
         if torch.rand(1) < self.p:
             image = F.hflip(image)
             if target is not None:
-                width, _ = F.get_image_size(image)
+                width, _ = get_image_size(image)
                 target["boxes"][:, [0, 2]] = width - target["boxes"][:, [2, 0]]
                 if "masks" in target:
                     target["masks"] = target["masks"].flip(-1)
@@ -76,7 +119,7 @@ class RandomIoUCrop(nn.Module):
             elif image.ndimension() == 2:
                 image = image.unsqueeze(0)
 
-        orig_w, orig_h = F.get_image_size(image)
+        orig_w, orig_h = get_image_size(image)
 
         while True:
             # sample an option
@@ -157,7 +200,7 @@ class RandomZoomOut(nn.Module):
         if torch.rand(1) < self.p:
             return image, target
 
-        orig_w, orig_h = F.get_image_size(image)
+        orig_w, orig_h = get_image_size(image)
 
         r = self.side_range[0] + torch.rand(1) * (self.side_range[1] - self.side_range[0])
         canvas_width = int(orig_w * r)
