@@ -34,6 +34,8 @@ from engine import train_one_epoch, evaluate
 import presets
 import utils
 
+from model.retinanet import retinanet_resnet50_fpn
+
 
 def get_dataset(name, image_set, transform, data_path):
     paths = {
@@ -56,7 +58,6 @@ def get_args_parser(add_help=True):
 
     parser.add_argument('--data-path', default='/datasets/coco2017', help='dataset')
     parser.add_argument('--dataset', default='coco', help='dataset')
-    parser.add_argument('--model', default='retinanet_resnet50_fpn', help='model')
     parser.add_argument('--device', default='cuda', help='device')
     parser.add_argument('-b', '--batch-size', default=2, type=int,
                         help='images per gpu, the total batch size is $NGPU x batch_size')
@@ -149,9 +150,9 @@ def main(args):
     kwargs = {
         "trainable_backbone_layers": args.trainable_backbone_layers
     }
-    model = torchvision.models.detection.__dict__[args.model](num_classes=num_classes, pretrained=args.pretrained,
-                                                              min_size=args.min_size, max_size=args.max_size,
-                                                              **kwargs)
+    model = retinanet_resnet50_fpn(num_classes=num_classes, pretrained=args.pretrained,
+                                   min_size=args.min_size, max_size=args.max_size,
+                                   **kwargs)
     model.to(device)
     if args.distributed and args.sync_bn:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
