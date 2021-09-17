@@ -1,37 +1,20 @@
-# Object detection reference training scripts
 
-## build and launch the container
-```
+# Retinanet-ResNet50
+This is an experimental repository that is based on torchvision's RetinaNet and is used to test and evaluate the model as the new object detection benchmark for MLPerf training and inference.
+[Torchvision RetinaNet](https://pytorch.org/vision/stable/_modules/torchvision/models/detection/retinanet.html)
+[MLPerf-SSD](https://github.com/mlcommons/training/tree/master/single_stage_detector/ssd)
+[MLCommons](https://mlcommons.org/en/)
+
+## Usage instructions
+
+build and launch the container:
+```bash
 ./scripts/docker/build.sh
+./scripts/docker/launch_local.sh  # you might want to change the dataset mount location
+```
+If necessary, Download MS-COCO dataset
+```bash
+./scripts/download_dataset.sh
 ```
 
-launch (change dataset location)
-```
-./scripts/docker/launch_local.sh
-```
-
-### Train
-
-You must modify the following flags:
-
-`--data-path=/path/to/coco/dataset`
-
-`--nproc_per_node=<number_of_gpus_available>`
-
-Except otherwise noted, all models have been trained on 8x V100 GPUs. 
-
-### RetinaNet
-```
-python -m torch.distributed.launch --nproc_per_node=8 --use_env train.py\
-    --dataset coco --model retinanet_resnet50_fpn --epochs 26\
-    --lr-steps 16 22 --aspect-ratio-group-factor 3 --lr 0.01
-```
-
-### SSD300 VGG16
-```
-python -m torch.distributed.launch --nproc_per_node=8 --use_env train.py\
-    --dataset coco --model ssd300_vgg16 --epochs 120\
-    --lr-steps 80 110 --aspect-ratio-group-factor 3 --lr 0.002 --batch-size 4\
-    --weight-decay 0.0005 --data-augmentation ssd
-```
-
+To train the model, use any of the training scripts in `scripts/train`
