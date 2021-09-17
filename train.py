@@ -24,7 +24,6 @@ import time
 import torch
 import torch.utils.data
 import torchvision
-import torchvision.models.detection
 
 from coco_utils import get_coco, get_coco_kp
 
@@ -97,6 +96,8 @@ def get_args_parser(add_help=True):
     # RetinaNet params
     parser.add_argument('--min-size', default=800, type=int, help='minimum size of the image to be rescaled before feeding it to the backbone')
     parser.add_argument('--max-size', default=1333, type=int, help='maximum size of the image to be rescaled before feeding it to the backbone')
+    parser.add_argument('--fixed-size', default=None, nargs=2, type=int,
+                        help='Fixed image size. Will overwrite --min-size and --max-size')
 
     # distributed training parameters
     parser.add_argument('--world-size', default=1, type=int,
@@ -152,6 +153,7 @@ def main(args):
     }
     model = retinanet_resnet50_fpn(num_classes=num_classes, pretrained=args.pretrained,
                                    min_size=args.min_size, max_size=args.max_size,
+                                   fixed_size=args.fixed_size,
                                    **kwargs)
     model.to(device)
     if args.distributed and args.sync_bn:

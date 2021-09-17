@@ -315,6 +315,7 @@ class RetinaNet(nn.Module):
                  # transform parameters
                  min_size=800, max_size=1333,
                  image_mean=None, image_std=None,
+                 size_divisible=32, fixed_size=None,
                  # Anchor parameters
                  anchor_generator=None, head=None,
                  proposal_matcher=None,
@@ -360,8 +361,9 @@ class RetinaNet(nn.Module):
             image_mean = [0.485, 0.456, 0.406]
         if image_std is None:
             image_std = [0.229, 0.224, 0.225]
-        self.transform = GeneralizedRCNNTransform(min_size, max_size, image_mean, image_std)
-
+        self.transform = GeneralizedRCNNTransform(min_size=min_size, max_size=max_size,
+                                                  image_mean=image_mean, image_std=image_std,
+                                                  size_divisible=size_divisible, fixed_size=fixed_size)
         self.score_thresh = score_thresh
         self.nms_thresh = nms_thresh
         self.detections_per_img = detections_per_img
