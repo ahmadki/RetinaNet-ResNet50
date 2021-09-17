@@ -60,6 +60,8 @@ def get_args_parser(add_help=True):
     parser.add_argument('--device', default='cuda', help='device')
     parser.add_argument('-b', '--batch-size', default=2, type=int,
                         help='images per gpu, the total batch size is $NGPU x batch_size')
+    parser.add_argument('-e', '--eval-batch-size', default=1, type=int,
+                        help='evaluation images per gpu, the total batch size is $NGPU x batch_size')
     parser.add_argument('--epochs', default=26, type=int, metavar='N',
                         help='number of total epochs to run')
     parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
@@ -138,12 +140,13 @@ def main(args):
         train_batch_sampler = torch.utils.data.BatchSampler(
             train_sampler, args.batch_size, drop_last=True)
 
+    args.eval_batch_size = args.eval_batch_size or args.batch_size
     data_loader = torch.utils.data.DataLoader(
         dataset, batch_sampler=train_batch_sampler, num_workers=args.workers,
         collate_fn=utils.collate_fn)
 
     data_loader_test = torch.utils.data.DataLoader(
-        dataset_test, batch_size=1,
+        dataset_test, batch_size=args.eval_batch_size,
         sampler=test_sampler, num_workers=args.workers,
         collate_fn=utils.collate_fn)
 
