@@ -9,6 +9,4 @@ python -m torch.distributed.launch --nproc_per_node=8 --use_env train.py \
     --aspect-ratio-group-factor 3 \
     --lr 0.01 \
     --batch-size 4 \
-    --min-size=800 \
-    --max-size=800 \
-    --amp
+    --fixed-size 800 800
