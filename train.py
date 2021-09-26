@@ -25,7 +25,8 @@ import torch
 import torch.utils.data
 import torchvision
 
-from coco_utils import get_coco, get_coco_kp
+from coco_utils import get_coco
+from openimages_utils import get_openimages
 
 from group_by_aspect_ratio import GroupedBatchSampler, create_aspect_ratio_groups
 from engine import train_one_epoch, evaluate
@@ -39,7 +40,7 @@ from model.retinanet import retinanet_resnet50_fpn
 def get_dataset(name, image_set, transform, data_path):
     paths = {
         "coco": (data_path, get_coco, 91),
-        "coco_kp": (data_path, get_coco_kp, 2)
+        "openimages": (data_path, get_openimages, 600)
     }
     p, ds_fn, num_classes = paths[name]
 

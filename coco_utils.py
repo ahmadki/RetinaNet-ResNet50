@@ -246,7 +246,3 @@ def get_coco(root, image_set, transforms, mode='instances'):
     # dataset = torch.utils.data.Subset(dataset, [i for i in range(500)])
 
     return dataset
-
-
-def get_coco_kp(root, image_set, transforms):
-    return get_coco(root, image_set, transforms, mode="person_keypoints")
