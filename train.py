@@ -33,8 +33,16 @@ from engine import train_one_epoch, evaluate
 import presets
 import utils
 
-from model.retinanet import retinanet_resnet50_fpn
+from model.retinanet import (retinanet_resnet50_fpn,
+                             retinanet_resnext50_32x4d_fpn,
+                             retinanet_resnet101_fpn,
+                             retinanet_resnext101_32x8d_fpn)
 
+
+VALID_BACKBONES = ['resnet50_fpn',
+    'resnext50_32x4d_fpn',
+    'resnet101_fpn',
+    'resnext101_32x8d_fpn']
 
 def get_dataset(name, image_set, transform, data_path):
     paths = {
@@ -55,6 +63,8 @@ def get_args_parser(add_help=True):
     import argparse
     parser = argparse.ArgumentParser(description='PyTorch Detection Training', add_help=add_help)
 
+    parser.add_argument('--backbone', default='resnet50_fpn', choices=VALID_BACKBONES,
+                        help='The model backbone')
     parser.add_argument('--data-path', default='/datasets/coco2017', help='dataset')
     parser.add_argument('--dataset', default='coco', help='dataset')
     parser.add_argument('--device', default='cuda', help='device')
@@ -154,10 +164,31 @@ def main(args):
     kwargs = {
         "trainable_backbone_layers": args.trainable_backbone_layers
     }
-    model = retinanet_resnet50_fpn(num_classes=num_classes, pretrained=args.pretrained,
-                                   min_size=args.min_size, max_size=args.max_size,
-                                   fixed_size=args.fixed_size,
-                                   **kwargs)
+
+    # TODO(ahmadki): needs cleanup
+    if args.backbone=="resnet50_fpn":
+        model = retinanet_resnet50_fpn(num_classes=num_classes, pretrained=args.pretrained,
+                                       min_size=args.min_size, max_size=args.max_size,
+                                       fixed_size=args.fixed_size,
+                                       **kwargs)
+    elif args.backbone=="resnext50_32x4d_fpn":
+        model = retinanet_resnext50_32x4d_fpn(num_classes=num_classes, pretrained=args.pretrained,
+                                              min_size=args.min_size, max_size=args.max_size,
+                                              fixed_size=args.fixed_size,
+                                              **kwargs)
+    elif args.backbone=="resnet101_fpn":
+        model = retinanet_resnet101_fpn(num_classes=num_classes, pretrained=args.pretrained,
+                                        min_size=args.min_size, max_size=args.max_size,
+                                        fixed_size=args.fixed_size,
+                                        **kwargs)
+    elif args.backbone=="resnext101_32x8d_fpn":
+        model = retinanet_resnext101_32x8d_fpn(num_classes=num_classes, pretrained=args.pretrained,
+                                               min_size=args.min_size, max_size=args.max_size,
+                                               fixed_size=args.fixed_size,
+                                               **kwargs)
+    else:
+        raise ValueError(f"Unknown backbone {args.backbone}")
+
     model.to(device)
     if args.distributed and args.sync_bn:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)

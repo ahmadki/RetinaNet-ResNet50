@@ -5,7 +5,7 @@ from .feature_pyramid_network import FeaturePyramidNetwork, LastLevelMaxPool
 from torchvision.ops import misc as misc_nn_ops
 
 from .utils import IntermediateLayerGetter
-from .resnet import resnet50
+from .resnet import resnet50, resnet101, resnext50_32x4d, resnext101_32x8d
 
 
 class BackboneWithFPN(nn.Module):
@@ -46,7 +46,8 @@ class BackboneWithFPN(nn.Module):
         return x
 
 
-def resnet50_fpn_backbone(
+def resnet_fpn_backbone(
+    backbone_name,
     pretrained,
     norm_layer=misc_nn_ops.FrozenBatchNorm2d,
     trainable_layers=3,
@@ -73,6 +74,8 @@ def resnet50_fpn_backbone(
         >>>    ('pool', torch.Size([1, 256, 1, 1]))]
 
     Args:
+        backbone_name (string): resnet architecture. Possible values are 'resnet50',
+             'resnet101', 'resnext50_32x4d', 'resnext101_32x8d'
         pretrained (bool): If True, returns a model with backbone pre-trained on Imagenet
         norm_layer (torchvision.ops): it is recommended to use the default value. For details visit:
             (https://github.com/facebookresearch/maskrcnn-benchmark/issues/267)
@@ -86,15 +89,23 @@ def resnet50_fpn_backbone(
             a new list of feature maps and their corresponding names. By
             default a ``LastLevelMaxPool`` is used.
     """
-    backbone = resnet50(
-        pretrained=pretrained,
-        norm_layer=norm_layer)
+    # backbone = resnet.__dict__[backbone_name](pretrained=pretrained, norm_layer=norm_layer)
+    # TODO(ahmadki): needs cleanup
+    if backbone_name=="resnet50":
+        backbone = resnet50(pretrained=pretrained, norm_layer=norm_layer)
+    elif backbone_name=="resnext50_32x4d":
+        backbone = resnet101(pretrained=pretrained, norm_layer=norm_layer)
+    elif backbone_name=="resnet101":
+        backbone = resnext50_32x4d(pretrained=pretrained, norm_layer=norm_layer)
+    elif backbone_name=="resnext101_32x8d":
+        backbone = resnext101_32x8d(pretrained=pretrained, norm_layer=norm_layer)
+
 
     # select layers that wont be frozen
     assert 0 <= trainable_layers <= 5
-    layers_to_train = ['layer4', 'layer3', 'layer2', 'layer1', 'conv1'][:trainable_layers]
+    layers_to_train = ["layer4", "layer3", "layer2", "layer1", "conv1"][:trainable_layers]
     if trainable_layers == 5:
-        layers_to_train.append('bn1')
+        layers_to_train.append("bn1")
     for name, parameter in backbone.named_parameters():
         if all([not name.startswith(layer) for layer in layers_to_train]):
             parameter.requires_grad_(False)
@@ -105,7 +116,7 @@ def resnet50_fpn_backbone(
     if returned_layers is None:
         returned_layers = [1, 2, 3, 4]
     assert min(returned_layers) > 0 and max(returned_layers) < 5
-    return_layers = {f'layer{k}': str(v) for v, k in enumerate(returned_layers)}
+    return_layers = {f"layer{k}": str(v) for v, k in enumerate(returned_layers)}
 
     in_channels_stage2 = backbone.inplanes // 8
     in_channels_list = [in_channels_stage2 * 2 ** (i - 1) for i in returned_layers]
@@ -128,4 +139,3 @@ def _validate_trainable_layers(pretrained, trainable_backbone_layers, max_value,
         trainable_backbone_layers = default_value
     assert 0 <= trainable_backbone_layers <= max_value
     return trainable_backbone_layers
-

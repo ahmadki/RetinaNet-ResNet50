@@ -3,7 +3,8 @@
 nvidia-smi
 env
 python -m torch.distributed.launch --nproc_per_node=8 --use_env train.py \
-    --batch-size 2 \
+    --backbone resnext50_32x4d_fpn \
+    --batch-size 4 \
     --dataset coco \
     --epochs 26 \
     --lr-steps 16 22 \

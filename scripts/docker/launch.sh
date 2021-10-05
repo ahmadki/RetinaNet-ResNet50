@@ -13,5 +13,5 @@ docker run --init -it --rm \
   -v $PWD:/ssd \
   -v "$DATA_DIR":/datasets/coco2017 \
   -v "$RESULTS_DIR":/results \
-  -v $PWD/resnet50-0676ba61.pth:/root/.cache/torch/hub/checkpoints/resnet50-0676ba61.pth \
+  -v /datasets/backbones:/root/.cache/torch/hub/checkpoints/ \
   $target_docker_image bash
