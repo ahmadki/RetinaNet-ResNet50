@@ -1,4 +1,5 @@
 nogit/
-*.pth
+logs/
+torch-model-cache/
 TODO
 
