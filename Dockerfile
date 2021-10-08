@@ -1,4 +1,4 @@
-ARG FROM_IMAGE_NAME=nvcr.io/nvidia/pytorch:21.08-py3
+ARG FROM_IMAGE_NAME=nvcr.io/nvidia/pytorch:21.09-py3
 FROM ${FROM_IMAGE_NAME}
 
 # Set working directory
