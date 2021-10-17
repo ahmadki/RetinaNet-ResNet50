@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-export TRAIN_CMD="train.py --batch-size 64 --dataset coco --epochs 75 --lr-steps 45 60 --aspect-ratio-group-factor 3 --lr 0.02 --fixed-size 800 800 --amp"
+export TRAIN_CMD="train.py --batch-size 64 --dataset coco --epochs 75 --lr-steps 45 60 --aspect-ratio-group-factor 3 --lr 0.02 --fixed-size 800 800"
 
 
 ## System run parms
