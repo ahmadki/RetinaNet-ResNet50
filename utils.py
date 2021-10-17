@@ -207,9 +207,10 @@ def collate_fn(batch):
     return tuple(zip(*batch))
 
 
-def warmup_lr_scheduler(optimizer, warmup_iters, warmup_factor):
+def warmup_lr_scheduler(optimizer, start_iter, warmup_iters, warmup_factor):
 
     def f(x):
+        x = x + start_iter
         if x >= warmup_iters:
             return 1
         alpha = float(x) / warmup_iters

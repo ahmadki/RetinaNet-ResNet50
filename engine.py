@@ -15,11 +15,12 @@ def train_one_epoch(model, optimizer, scaler, data_loader, device, epoch, args):
     header = 'Epoch: [{}]'.format(epoch)
 
     lr_scheduler = None
-    if epoch == 0:
-        warmup_factor = 1. / 1000
-        warmup_iters = min(1000, len(data_loader) - 1)
-
-        lr_scheduler = utils.warmup_lr_scheduler(optimizer, warmup_iters, warmup_factor)
+    if epoch < args.warmup_epochs:
+        # Convert epochs to iterations
+        # we want to control warmup at the epoch level, but update lr every iteration
+        start_iter = epoch*len(data_loader)
+        warmup_iters = args.warmup_epochs*len(data_loader)
+        lr_scheduler = utils.warmup_lr_scheduler(optimizer, start_iter, warmup_iters, args.warmup_factor)
 
     for images, targets in metric_logger.log_every(data_loader, args.print_freq, header):
         images = list(image.to(device) for image in images)
