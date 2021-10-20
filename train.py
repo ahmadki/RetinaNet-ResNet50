@@ -92,9 +92,9 @@ def get_args_parser(add_help=True):
     parser.add_argument('--lr-gamma', default=0.1, type=float,
                         help='decrease lr by a factor of lr-gamma (multisteplr scheduler only)')
     parser.add_argument('--warmup-epochs', default=1, type=int,
-                        help='') # TODO: help
+                        help='how long the learning rate will be warmed up in fraction of epochs')
     parser.add_argument('--warmup-factor', default=1e-3, type=float,
-                        help='') # TODO: help
+                        help='factor for controlling warmup curve')
     parser.add_argument('--print-freq', default=20, type=int, help='print frequency')
     parser.add_argument('--output-dir', default=None, help='path where to save')
     parser.add_argument('--resume', default='', help='resume from checkpoint')

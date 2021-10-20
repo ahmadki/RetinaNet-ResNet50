@@ -94,9 +94,9 @@ def resnet_fpn_backbone(
     if backbone_name=="resnet50":
         backbone = resnet50(pretrained=pretrained, norm_layer=norm_layer)
     elif backbone_name=="resnext50_32x4d":
-        backbone = resnet101(pretrained=pretrained, norm_layer=norm_layer)
-    elif backbone_name=="resnet101":
         backbone = resnext50_32x4d(pretrained=pretrained, norm_layer=norm_layer)
+    elif backbone_name=="resnet101":
+        backbone = resnet101(pretrained=pretrained, norm_layer=norm_layer)
     elif backbone_name=="resnext101_32x8d":
         backbone = resnext101_32x8d(pretrained=pretrained, norm_layer=norm_layer)
 
