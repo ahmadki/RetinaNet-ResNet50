@@ -17,37 +17,28 @@ Also, if you train Keypoint R-CNN, the default hyperparameters are
 Because the number of images is smaller in the person keypoint subset of COCO,
 the number of epochs should be adapted so that we have the same number of iterations.
 """
-import datetime
 import os
 import time
+import random
+import datetime
 
+import numpy as np
 import torch
 import torch.utils.data
 import torchvision
 
-from coco_utils import get_coco, get_coco_kp
+from coco_utils import get_coco
 
-from group_by_aspect_ratio import GroupedBatchSampler, create_aspect_ratio_groups
-from engine import train_one_epoch, evaluate
-
-import presets
 import utils
-
+import presets
+from engine import train_one_epoch, evaluate
 from model.retinanet import (retinanet_resnet50_fpn,
-                             retinanet_resnext50_32x4d_fpn,
-                             retinanet_resnet101_fpn,
-                             retinanet_resnext101_32x8d_fpn)
+                             retinanet_resnext50_32x4d_fpn)
 
-
-VALID_BACKBONES = ['resnet50_fpn',
-    'resnext50_32x4d_fpn',
-    'resnet101_fpn',
-    'resnext101_32x8d_fpn']
 
 def get_dataset(name, image_set, transform, data_path):
     paths = {
         "coco": (data_path, get_coco, 91),
-        "coco_kp": (data_path, get_coco_kp, 2)
     }
     p, ds_fn, num_classes = paths[name]
 
@@ -63,7 +54,7 @@ def get_args_parser(add_help=True):
     import argparse
     parser = argparse.ArgumentParser(description='PyTorch Detection Training', add_help=add_help)
 
-    parser.add_argument('--backbone', default='resnet50_fpn', choices=VALID_BACKBONES,
+    parser.add_argument('--backbone', default='resnet50_fpn', choices=['resnet50_fpn', 'resnext50_32x4d_fpn'],
                         help='The model backbone')
     parser.add_argument('--data-path', default='/datasets/coco2017', help='dataset')
     parser.add_argument('--dataset', default='coco', help='dataset')
@@ -99,7 +90,6 @@ def get_args_parser(add_help=True):
     parser.add_argument('--output-dir', default=None, help='path where to save')
     parser.add_argument('--resume', default='', help='resume from checkpoint')
     parser.add_argument('--start_epoch', default=0, type=int, help='start epoch')
-    parser.add_argument('--aspect-ratio-group-factor', default=3, type=int)
     parser.add_argument('--trainable-backbone-layers', default=None, type=int,
                         help='number of trainable layers of backbone')
     parser.add_argument('--data-augmentation', default="hflip", help='data augmentation policy (default: hflip)')
@@ -110,10 +100,8 @@ def get_args_parser(add_help=True):
     parser.add_argument("--pretrained", dest="pretrained", action="store_true", help="Use pre-trained models from the modelzoo")
 
     # RetinaNet params
-    parser.add_argument('--min-size', default=800, type=int, help='minimum size of the image to be rescaled before feeding it to the backbone')
-    parser.add_argument('--max-size', default=1333, type=int, help='maximum size of the image to be rescaled before feeding it to the backbone')
-    parser.add_argument('--fixed-size', default=None, nargs=2, type=int,
-                        help='Fixed image size. Will overwrite --min-size and --max-size')
+    parser.add_argument('--image-size', default=[800, 800], nargs=2, type=int,
+                        help='Image size for training')
 
     # distributed training parameters
     parser.add_argument('--world-size', default=1, type=int,
@@ -146,13 +134,7 @@ def main(args):
     else:
         train_sampler = torch.utils.data.RandomSampler(dataset)
         test_sampler = torch.utils.data.SequentialSampler(dataset_test)
-
-    if args.aspect_ratio_group_factor >= 0:
-        group_ids = create_aspect_ratio_groups(dataset, k=args.aspect_ratio_group_factor)
-        train_batch_sampler = GroupedBatchSampler(train_sampler, group_ids, args.batch_size)
-    else:
-        train_batch_sampler = torch.utils.data.BatchSampler(
-            train_sampler, args.batch_size, drop_last=True)
+    train_batch_sampler = torch.utils.data.BatchSampler(train_sampler, args.batch_size, drop_last=True)
 
     data_loader = torch.utils.data.DataLoader(
         dataset, batch_sampler=train_batch_sampler, num_workers=args.workers,
@@ -171,26 +153,14 @@ def main(args):
     # TODO(ahmadki): needs cleanup
     if args.backbone=="resnet50_fpn":
         model = retinanet_resnet50_fpn(num_classes=num_classes, pretrained=args.pretrained,
-                                       min_size=args.min_size, max_size=args.max_size,
-                                       fixed_size=args.fixed_size,
+                                       image_size=args.image_size,
                                        **kwargs)
     elif args.backbone=="resnext50_32x4d_fpn":
         model = retinanet_resnext50_32x4d_fpn(num_classes=num_classes, pretrained=args.pretrained,
-                                              min_size=args.min_size, max_size=args.max_size,
-                                              fixed_size=args.fixed_size,
+                                              image_size=args.image_size,
                                               **kwargs)
-    elif args.backbone=="resnet101_fpn":
-        model = retinanet_resnet101_fpn(num_classes=num_classes, pretrained=args.pretrained,
-                                        min_size=args.min_size, max_size=args.max_size,
-                                        fixed_size=args.fixed_size,
-                                        **kwargs)
-    elif args.backbone=="resnext101_32x8d_fpn":
-        model = retinanet_resnext101_32x8d_fpn(num_classes=num_classes, pretrained=args.pretrained,
-                                               min_size=args.min_size, max_size=args.max_size,
-                                               fixed_size=args.fixed_size,
-                                               **kwargs)
     else:
-        raise ValueError(f"Unknown backbone {args.backbone}")
+        raise ValueError(f"Unknown --backbone={args.backbone}")
 
     model.to(device)
     if args.distributed and args.sync_bn:

@@ -5,7 +5,7 @@ from .feature_pyramid_network import FeaturePyramidNetwork, LastLevelMaxPool
 from torchvision.ops import misc as misc_nn_ops
 
 from .utils import IntermediateLayerGetter
-from .resnet import resnet50, resnet101, resnext50_32x4d, resnext101_32x8d
+from .resnet import resnet50, resnext50_32x4d
 
 
 class BackboneWithFPN(nn.Module):
@@ -95,10 +95,8 @@ def resnet_fpn_backbone(
         backbone = resnet50(pretrained=pretrained, norm_layer=norm_layer)
     elif backbone_name=="resnext50_32x4d":
         backbone = resnext50_32x4d(pretrained=pretrained, norm_layer=norm_layer)
-    elif backbone_name=="resnet101":
-        backbone = resnet101(pretrained=pretrained, norm_layer=norm_layer)
-    elif backbone_name=="resnext101_32x8d":
-        backbone = resnext101_32x8d(pretrained=pretrained, norm_layer=norm_layer)
+    else:
+        raise ValueError(f"Unsupported backbone_name = {backbone_name}")
 
 
     # select layers that wont be frozen

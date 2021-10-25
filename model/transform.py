@@ -21,41 +21,25 @@ def _fake_cast_onnx(v: Tensor) -> float:
     return v
 
 
-def _resize_image_and_masks(image: Tensor, self_min_size: float, self_max_size: float,
+def _resize_image_and_masks(image: Tensor,
                             target: Optional[Dict[str, Tensor]] = None,
-                            fixed_size: Optional[Tuple[int, int]] = None,
+                            image_size: Optional[Tuple[int, int]] = None,
                             ) -> Tuple[Tensor, Optional[Dict[str, Tensor]]]:
     if torchvision._is_tracing():
         im_shape = _get_shape_onnx(image)
     else:
         im_shape = torch.tensor(image.shape[-2:])
 
-    size: Optional[List[int]] = None
-    scale_factor: Optional[float] = None
-    recompute_scale_factor: Optional[bool] = None
-    if fixed_size is not None:
-        size = [fixed_size[1], fixed_size[0]]
-    else:
-        min_size = torch.min(im_shape).to(dtype=torch.float32)
-        max_size = torch.max(im_shape).to(dtype=torch.float32)
-        scale = torch.min(self_min_size / min_size, self_max_size / max_size)
-
-        if torchvision._is_tracing():
-            scale_factor = _fake_cast_onnx(scale)
-        else:
-            scale_factor = scale.item()
-        recompute_scale_factor = True
-
-    image = torch.nn.functional.interpolate(image[None], size=size, scale_factor=scale_factor, mode='bilinear',
-                                            recompute_scale_factor=recompute_scale_factor, align_corners=False)[0]
+    image = torch.nn.functional.interpolate(image[None], size=image_size, scale_factor=None, mode='bilinear',
+                                            recompute_scale_factor=None, align_corners=False)[0]
 
     if target is None:
         return image, target
 
     if "masks" in target:
         mask = target["masks"]
-        mask = torch.nn.functional.interpolate(mask[:, None].float(), size=size, scale_factor=scale_factor,
-                                               recompute_scale_factor=recompute_scale_factor)[:, 0].byte()
+        mask = torch.nn.functional.interpolate(mask[:, None].float(), size=image_size, scale_factor=None,
+                                               recompute_scale_factor=None)[:, 0].byte()
         target["masks"] = mask
     return image, target
 
@@ -67,22 +51,17 @@ class GeneralizedRCNNTransform(nn.Module):
 
     The transformations it perform are:
         - input normalization (mean subtraction and std division)
-        - input / target resizing to match min_size / max_size
+        - input / target resizing to match image_size
 
     It returns a ImageList for the inputs, and a List[Dict[Tensor]] for the targets
     """
 
-    def __init__(self, min_size: int, max_size: int, image_mean: List[float], image_std: List[float],
-                 size_divisible: int = 32, fixed_size: Optional[Tuple[int, int]] = None):
+    def __init__(self, image_size: Optional[Tuple[int, int]],
+                 image_mean: List[float], image_std: List[float],):
         super(GeneralizedRCNNTransform, self).__init__()
-        if not isinstance(min_size, (list, tuple)):
-            min_size = (min_size,)
-        self.min_size = min_size
-        self.max_size = max_size
+        self.image_size = image_size
         self.image_mean = image_mean
         self.image_std = image_std
-        self.size_divisible = size_divisible
-        self.fixed_size = fixed_size
 
     def forward(self,
                 images: List[Tensor],
@@ -115,7 +94,7 @@ class GeneralizedRCNNTransform(nn.Module):
                 targets[i] = target_index
 
         image_sizes = [img.shape[-2:] for img in images]
-        images = self.batch_images(images, size_divisible=self.size_divisible)
+        images = torch.stack(images)
         image_sizes_list: List[Tuple[int, int]] = []
         for image_size in image_sizes:
             assert len(image_size) == 2
@@ -149,12 +128,7 @@ class GeneralizedRCNNTransform(nn.Module):
                target: Optional[Dict[str, Tensor]] = None,
                ) -> Tuple[Tensor, Optional[Dict[str, Tensor]]]:
         h, w = image.shape[-2:]
-        if self.training:
-            size = float(self.torch_choice(self.min_size))
-        else:
-            # FIXME assume for now that testing uses the largest scale
-            size = float(self.min_size[-1])
-        image, target = _resize_image_and_masks(image, size, float(self.max_size), target, self.fixed_size)
+        image, target = _resize_image_and_masks(image, target, self.image_size)
 
         if target is None:
             return image, target
@@ -168,56 +142,6 @@ class GeneralizedRCNNTransform(nn.Module):
             keypoints = resize_keypoints(keypoints, (h, w), image.shape[-2:])
             target["keypoints"] = keypoints
         return image, target
-
-    # _onnx_batch_images() is an implementation of
-    # batch_images() that is supported by ONNX tracing.
-    @torch.jit.unused
-    def _onnx_batch_images(self, images: List[Tensor], size_divisible: int = 32) -> Tensor:
-        max_size = []
-        for i in range(images[0].dim()):
-            max_size_i = torch.max(torch.stack([img.shape[i] for img in images]).to(torch.float32)).to(torch.int64)
-            max_size.append(max_size_i)
-        stride = size_divisible
-        max_size[1] = (torch.ceil((max_size[1].to(torch.float32)) / stride) * stride).to(torch.int64)
-        max_size[2] = (torch.ceil((max_size[2].to(torch.float32)) / stride) * stride).to(torch.int64)
-        max_size = tuple(max_size)
-
-        # work around for
-        # pad_img[: img.shape[0], : img.shape[1], : img.shape[2]].copy_(img)
-        # which is not yet supported in onnx
-        padded_imgs = []
-        for img in images:
-            padding = [(s1 - s2) for s1, s2 in zip(max_size, tuple(img.shape))]
-            padded_img = torch.nn.functional.pad(img, (0, padding[2], 0, padding[1], 0, padding[0]))
-            padded_imgs.append(padded_img)
-
-        return torch.stack(padded_imgs)
-
-    def max_by_axis(self, the_list: List[List[int]]) -> List[int]:
-        maxes = the_list[0]
-        for sublist in the_list[1:]:
-            for index, item in enumerate(sublist):
-                maxes[index] = max(maxes[index], item)
-        return maxes
-
-    def batch_images(self, images: List[Tensor], size_divisible: int = 32) -> Tensor:
-        if torchvision._is_tracing():
-            # batch_images() does not export well to ONNX
-            # call _onnx_batch_images() instead
-            return self._onnx_batch_images(images, size_divisible)
-
-        max_size = self.max_by_axis([list(img.shape) for img in images])
-        stride = float(size_divisible)
-        max_size = list(max_size)
-        max_size[1] = int(math.ceil(float(max_size[1]) / stride) * stride)
-        max_size[2] = int(math.ceil(float(max_size[2]) / stride) * stride)
-
-        batch_shape = [len(images)] + max_size
-        batched_imgs = images[0].new_full(batch_shape, 0)
-        for img, pad_img in zip(images, batched_imgs):
-            pad_img[: img.shape[0], : img.shape[1], : img.shape[2]].copy_(img)
-
-        return batched_imgs
 
     def postprocess(self,
                     result: List[Dict[str, Tensor]],
@@ -244,8 +168,8 @@ class GeneralizedRCNNTransform(nn.Module):
         format_string = self.__class__.__name__ + '('
         _indent = '\n    '
         format_string += "{0}Normalize(mean={1}, std={2})".format(_indent, self.image_mean, self.image_std)
-        format_string += "{0}Resize(min_size={1}, max_size={2}, mode='bilinear')".format(_indent, self.min_size,
-                                                                                         self.max_size)
+        format_string += "{0}Resize(height={1}, width={2}, mode='bilinear')".format(_indent, self.image_size[0],
+                                                                                         self.image_size[1])
         format_string += '\n)'
         return format_string
 

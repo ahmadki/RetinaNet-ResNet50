@@ -1,3 +1,5 @@
+__pycache__/
+
 nogit/
 logs/
 torch-model-cache/

@@ -17,9 +17,7 @@ from .utils import Matcher, overwrite_eps, BoxCoder
 
 __all__ = [
     "retinanet_resnet50_fpn",
-    "retinanet_resnet101_fpn",
     "retinanet_resnext50_32x4d_fpn",
-    "retinanet_resnext101_32x8d_fpn",
 ]
 
 
@@ -257,8 +255,6 @@ class RetinaNet(nn.Module):
             channels that each feature map has (and it should be the same for all feature maps).
             The backbone should return a single Tensor or an OrderedDict[Tensor].
         num_classes (int): number of output classes of the model (including the background).
-        min_size (int): minimum size of the image to be rescaled before feeding it to the backbone
-        max_size (int): maximum size of the image to be rescaled before feeding it to the backbone
         image_mean (Tuple[float, float, float]): mean values used for input normalization.
             They are generally the mean values of the dataset on which the backbone has been trained
             on
@@ -316,9 +312,8 @@ class RetinaNet(nn.Module):
 
     def __init__(self, backbone, num_classes,
                  # transform parameters
-                 min_size=800, max_size=1333,
+                 image_size=None,
                  image_mean=None, image_std=None,
-                 size_divisible=32, fixed_size=None,
                  # Anchor parameters
                  anchor_generator=None, head=None,
                  proposal_matcher=None,
@@ -364,9 +359,8 @@ class RetinaNet(nn.Module):
             image_mean = [0.485, 0.456, 0.406]
         if image_std is None:
             image_std = [0.229, 0.224, 0.225]
-        self.transform = GeneralizedRCNNTransform(min_size=min_size, max_size=max_size,
-                                                  image_mean=image_mean, image_std=image_std,
-                                                  size_divisible=size_divisible, fixed_size=fixed_size)
+        self.transform = GeneralizedRCNNTransform(image_size=image_size,
+                                                  image_mean=image_mean, image_std=image_std)
         self.score_thresh = score_thresh
         self.nms_thresh = nms_thresh
         self.detections_per_img = detections_per_img
@@ -693,131 +687,4 @@ def retinanet_resnext50_32x4d_fpn(pretrained=False, progress=True,
     if pretrained:
         raise ValueError("Torchvision doesn't have a pretrained retinanet_resnext50_32x4d_fpn model")
 
-    return model
-
-
-def retinanet_resnet101_fpn(pretrained=False, progress=True,
-                           num_classes=91, pretrained_backbone=True, trainable_backbone_layers=None, **kwargs):
-    """
-    Constructs a RetinaNet model with a ResNet-101-FPN backbone.
-
-    Reference: `"Focal Loss for Dense Object Detection" <https://arxiv.org/abs/1708.02002>`_.
-
-    The input to the model is expected to be a list of tensors, each of shape ``[C, H, W]``, one for each
-    image, and should be in ``0-1`` range. Different images can have different sizes.
-
-    The behavior of the model changes depending if it is in training or evaluation mode.
-
-    During training, the model expects both the input tensors, as well as a targets (list of dictionary),
-    containing:
-
-        - boxes (``FloatTensor[N, 4]``): the ground-truth boxes in ``[x1, y1, x2, y2]`` format, with
-          ``0 <= x1 < x2 <= W`` and ``0 <= y1 < y2 <= H``.
-        - labels (``Int64Tensor[N]``): the class label for each ground-truth box
-
-    The model returns a ``Dict[Tensor]`` during training, containing the classification and regression
-    losses.
-
-    During inference, the model requires only the input tensors, and returns the post-processed
-    predictions as a ``List[Dict[Tensor]]``, one for each input image. The fields of the ``Dict`` are as
-    follows, where ``N`` is the number of detections:
-
-        - boxes (``FloatTensor[N, 4]``): the predicted boxes in ``[x1, y1, x2, y2]`` format, with
-          ``0 <= x1 < x2 <= W`` and ``0 <= y1 < y2 <= H``.
-        - labels (``Int64Tensor[N]``): the predicted labels for each detection
-        - scores (``Tensor[N]``): the scores of each detection
-
-    For more details on the output, you may refer to :ref:`instance_seg_output`.
-
-    Example::
-
-        >>> model = torchvision.models.detection.retinanet_resnet101_fpn(pretrained=True)
-        >>> model.eval()
-        >>> x = [torch.rand(3, 300, 400), torch.rand(3, 500, 400)]
-        >>> predictions = model(x)
-
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on COCO train2017
-        progress (bool): If True, displays a progress bar of the download to stderr
-        num_classes (int): number of output classes of the model (including the background)
-        pretrained_backbone (bool): If True, returns a model with backbone pre-trained on Imagenet
-        trainable_backbone_layers (int): number of trainable (not frozen) resnet layers starting from final block.
-            Valid values are between 0 and 5, with 5 meaning all backbone layers are trainable.
-    """
-    trainable_backbone_layers = _validate_trainable_layers(
-        pretrained or pretrained_backbone, trainable_backbone_layers, 5, 3)
-
-    if pretrained:
-        # no need to download the backbone if pretrained is set
-        pretrained_backbone = False
-    # skip P2 because it generates too many anchors (according to their paper)
-    backbone = resnet_fpn_backbone('resnet101', pretrained_backbone, returned_layers=[2, 3, 4], # TODO
-                                   extra_blocks=LastLevelP6P7(256, 256), trainable_layers=trainable_backbone_layers)
-    model = RetinaNet(backbone, num_classes, **kwargs)
-    if pretrained:
-        raise ValueError("Torchvision doesn't have a pretrained retinanet_resnet101_fpn model")
-
-    return model
-
-
-def retinanet_resnext101_32x8d_fpn(pretrained=False, progress=True,
-                                   num_classes=91, pretrained_backbone=True, trainable_backbone_layers=None, **kwargs):
-    """
-    Constructs a RetinaNet model with a resnext101_32x8d-FPN backbone.
-
-    Reference: `"Focal Loss for Dense Object Detection" <https://arxiv.org/abs/1708.02002>`_.
-
-    The input to the model is expected to be a list of tensors, each of shape ``[C, H, W]``, one for each
-    image, and should be in ``0-1`` range. Different images can have different sizes.
-
-    The behavior of the model changes depending if it is in training or evaluation mode.
-
-    During training, the model expects both the input tensors, as well as a targets (list of dictionary),
-    containing:
-
-        - boxes (``FloatTensor[N, 4]``): the ground-truth boxes in ``[x1, y1, x2, y2]`` format, with
-          ``0 <= x1 < x2 <= W`` and ``0 <= y1 < y2 <= H``.
-        - labels (``Int64Tensor[N]``): the class label for each ground-truth box
-
-    The model returns a ``Dict[Tensor]`` during training, containing the classification and regression
-    losses.
-
-    During inference, the model requires only the input tensors, and returns the post-processed
-    predictions as a ``List[Dict[Tensor]]``, one for each input image. The fields of the ``Dict`` are as
-    follows, where ``N`` is the number of detections:
-
-        - boxes (``FloatTensor[N, 4]``): the predicted boxes in ``[x1, y1, x2, y2]`` format, with
-          ``0 <= x1 < x2 <= W`` and ``0 <= y1 < y2 <= H``.
-        - labels (``Int64Tensor[N]``): the predicted labels for each detection
-        - scores (``Tensor[N]``): the scores of each detection
-
-    For more details on the output, you may refer to :ref:`instance_seg_output`.
-
-    Example::
-
-        >>> model = torchvision.models.detection.retinanet_resnext101_32x8d_fpn(pretrained=True)
-        >>> model.eval()
-        >>> x = [torch.rand(3, 300, 400), torch.rand(3, 500, 400)]
-        >>> predictions = model(x)
-
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on COCO train2017
-        progress (bool): If True, displays a progress bar of the download to stderr
-        num_classes (int): number of output classes of the model (including the background)
-        pretrained_backbone (bool): If True, returns a model with backbone pre-trained on Imagenet
-        trainable_backbone_layers (int): number of trainable (not frozen) resnet layers starting from final block.
-            Valid values are between 0 and 5, with 5 meaning all backbone layers are trainable.
-    """
-    trainable_backbone_layers = _validate_trainable_layers(
-        pretrained or pretrained_backbone, trainable_backbone_layers, 5, 3)
-
-    if pretrained:
-        # no need to download the backbone if pretrained is set
-        pretrained_backbone = False
-    # skip P2 because it generates too many anchors (according to their paper)
-    backbone = resnet_fpn_backbone('resnext101_32x8d', pretrained_backbone, returned_layers=[2, 3, 4], # TODO
-                                   extra_blocks=LastLevelP6P7(256, 256), trainable_layers=trainable_backbone_layers)
-    model = RetinaNet(backbone, num_classes, **kwargs)
-    if pretrained:
-        raise ValueError("Torchvision doesn't have a pretrained retinanet_resnext101_32x8d_fpn model")
     return model

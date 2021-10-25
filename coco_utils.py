@@ -12,24 +12,6 @@ from pycocotools.coco import COCO
 import transforms as T
 
 
-class FilterAndRemapCocoCategories(object):
-    def __init__(self, categories, remap=True):
-        self.categories = categories
-        self.remap = remap
-
-    def __call__(self, image, target):
-        anno = target["annotations"]
-        anno = [obj for obj in anno if obj["category_id"] in self.categories]
-        if not self.remap:
-            target["annotations"] = anno
-            return image, target
-        anno = copy.deepcopy(anno)
-        for obj in anno:
-            obj["category_id"] = self.categories.index(obj["category_id"])
-        target["annotations"] = anno
-        return image, target
-
-
 def convert_coco_poly_to_mask(segmentations, height, width):
     masks = []
     for polygons in segmentations:
@@ -225,7 +207,6 @@ def get_coco(root, image_set, transforms, mode='instances'):
     PATHS = {
         "train": ("train2017", os.path.join("annotations", anno_file_template.format(mode, "train"))),
         "val": ("val2017", os.path.join("annotations", anno_file_template.format(mode, "val"))),
-        # "train": ("val2017", os.path.join("annotations", anno_file_template.format(mode, "val")))
     }
 
     t = [ConvertCocoPolysToMask()]
@@ -243,10 +224,4 @@ def get_coco(root, image_set, transforms, mode='instances'):
     if image_set == "train":
         dataset = _coco_remove_images_without_annotations(dataset)
 
-    # dataset = torch.utils.data.Subset(dataset, [i for i in range(500)])
-
     return dataset
-
-
-def get_coco_kp(root, image_set, transforms):
-    return get_coco(root, image_set, transforms, mode="person_keypoints")

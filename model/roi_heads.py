@@ -9,7 +9,7 @@ from torchvision.ops import roi_align
 
 from typing import Optional, List, Dict, Tuple
 
-from .utils import BoxCoder, Matcher, BalancedPositiveNegativeSampler
+from .utils import BoxCoder, Matcher
 
 
 def expand_boxes(boxes, scale):
