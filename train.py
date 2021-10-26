@@ -20,6 +20,7 @@ the number of epochs should be adapted so that we have the same number of iterat
 import os
 import time
 import random
+import argparse
 import datetime
 
 import numpy as np
@@ -50,65 +51,68 @@ def get_transform(train, data_augmentation):
     return presets.DetectionPresetTrain(data_augmentation) if train else presets.DetectionPresetEval()
 
 
-def get_args_parser(add_help=True):
-    import argparse
+def parse_args(add_help=True):
     parser = argparse.ArgumentParser(description='PyTorch Detection Training', add_help=add_help)
 
+    # Model
     parser.add_argument('--backbone', default='resnet50_fpn', choices=['resnet50_fpn', 'resnext50_32x4d_fpn'],
                         help='The model backbone')
-    parser.add_argument('--data-path', default='/datasets/coco2017', help='dataset')
+    parser.add_argument('--trainable-backbone-layers', default=None, type=int,
+                        help='number of trainable layers of backbone')
+    parser.add_argument("--sync-bn", dest="sync_bn", action="store_true", help="Use sync batch norm")
+    parser.add_argument("--amp", action="store_true",
+                        help="Whether to enable Automatic Mixed Precision (AMP). When false, uses TF32 on A100 and FP32 on V100 GPUS.")
+
+    # Dataset
     parser.add_argument('--dataset', default='coco', help='dataset')
-    parser.add_argument('--device', default='cuda', help='device')
+    parser.add_argument('--data-path', default='/datasets/coco2017', help='dataset')
+    parser.add_argument('--image-size', default=[800, 800], nargs=2, type=int,
+                        help='Image size for training')
+    parser.add_argument('--data-augmentation', default="hflip", help='data augmentation policy (default: hflip)')
+
+    # Train parameters
+    parser.add_argument('--epochs', default=26, type=int, metavar='N',
+                        help='number of total epochs to run')
+    parser.add_argument('--start_epoch', default=0, type=int, help='start epoch')
+    parser.add_argument('--output-dir', default=None, help='path where to save checkpoints.')
+    parser.add_argument('--resume', default='', help='resume from checkpoint')
+    parser.add_argument("--pretrained", dest="pretrained", action="store_true", help="Use pre-trained models from the modelzoo")
+
+    # Hyperparameters
     parser.add_argument('-b', '--batch-size', default=2, type=int,
                         help='images per gpu, the total batch size is $NGPU x batch_size')
     parser.add_argument('-e', '--eval-batch-size', default=None, type=int,
                         help='evaluation images per gpu, the total batch size is $NGPU x batch_size')
-    parser.add_argument('--epochs', default=26, type=int, metavar='N',
-                        help='number of total epochs to run')
-    parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
-                        help='number of data loading workers (default: 4)')
     parser.add_argument('--lr', default=0.02, type=float,
                         help='initial learning rate, 0.02 is the default value for training '
                              'on 8 gpus and 2 images_per_gpu')
+    parser.add_argument('--lr-steps', default=[16, 22], nargs='+', type=int,
+                        help='decrease lr every step-size epochs')
+    parser.add_argument('--lr-gamma', default=0.1, type=float,
+                        help='decrease lr by a factor of lr-gamma')
     parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                         help='momentum')
     parser.add_argument('--wd', '--weight-decay', default=1e-4, type=float,
                         metavar='W', help='weight decay (default: 1e-4)',
                         dest='weight_decay')
-    parser.add_argument('--lr-scheduler', default="multisteplr", help='the lr scheduler (default: multisteplr)')
-    parser.add_argument('--lr-step-size', default=8, type=int,
-                        help='decrease lr every step-size epochs (multisteplr scheduler only)')
-    parser.add_argument('--lr-steps', default=[16, 22], nargs='+', type=int,
-                        help='decrease lr every step-size epochs (multisteplr scheduler only)')
-    parser.add_argument('--lr-gamma', default=0.1, type=float,
-                        help='decrease lr by a factor of lr-gamma (multisteplr scheduler only)')
-    parser.add_argument('--warmup-epochs', default=1, type=int,
-                        help='how long the learning rate will be warmed up in fraction of epochs')
-    parser.add_argument('--warmup-factor', default=1e-3, type=float,
-                        help='factor for controlling warmup curve')
-    parser.add_argument('--print-freq', default=20, type=int, help='print frequency')
-    parser.add_argument('--output-dir', default=None, help='path where to save')
-    parser.add_argument('--resume', default='', help='resume from checkpoint')
-    parser.add_argument('--start_epoch', default=0, type=int, help='start epoch')
-    parser.add_argument('--trainable-backbone-layers', default=None, type=int,
-                        help='number of trainable layers of backbone')
-    parser.add_argument('--data-augmentation', default="hflip", help='data augmentation policy (default: hflip)')
-    parser.add_argument("--sync-bn", dest="sync_bn", action="store_true", help="Use sync batch norm")
-    parser.add_argument("--amp", action="store_true",
-                        help="Whether to enable Automatic Mixed Precision (AMP). When false, uses TF32 on A100 and FP32 on V100 GPUS.")
-    parser.add_argument("--test-only", dest="test_only", action="store_true", help="Only test the model")
-    parser.add_argument("--pretrained", dest="pretrained", action="store_true", help="Use pre-trained models from the modelzoo")
 
-    # RetinaNet params
-    parser.add_argument('--image-size', default=[800, 800], nargs=2, type=int,
-                        help='Image size for training')
+    # Other
+    parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
+                        help='number of data loading workers (default: 4)')
+    parser.add_argument('--print-freq', default=20, type=int, help='print frequency')
+    parser.add_argument("--test-only", dest="test_only", action="store_true", help="Only test the model")
+    parser.add_argument('--device', default='cuda', help='device')
 
     # distributed training parameters
     parser.add_argument('--world-size', default=1, type=int,
                         help='number of distributed processes')
     parser.add_argument('--dist-url', default='env://', help='url used to set up distributed training')
 
-    return parser
+    args = parser.parse_args()
+
+    args.eval_batch_size = args.eval_batch_size or args.batch_size
+
+    return args
 
 
 def main(args):
@@ -139,18 +143,16 @@ def main(args):
     data_loader = torch.utils.data.DataLoader(
         dataset, batch_sampler=train_batch_sampler, num_workers=args.workers,
         collate_fn=utils.collate_fn)
-
     data_loader_test = torch.utils.data.DataLoader(
         dataset_test, batch_size=args.eval_batch_size or args.batch_size,
         sampler=test_sampler, num_workers=args.workers,
         collate_fn=utils.collate_fn)
 
     print("Creating model")
+    model = None
     kwargs = {
         "trainable_backbone_layers": args.trainable_backbone_layers
     }
-
-    # TODO(ahmadki): needs cleanup
     if args.backbone=="resnet50_fpn":
         model = retinanet_resnet50_fpn(num_classes=num_classes, pretrained=args.pretrained,
                                        image_size=args.image_size,
@@ -159,8 +161,6 @@ def main(args):
         model = retinanet_resnext50_32x4d_fpn(num_classes=num_classes, pretrained=args.pretrained,
                                               image_size=args.image_size,
                                               **kwargs)
-    else:
-        raise ValueError(f"Unknown --backbone={args.backbone}")
 
     model.to(device)
     if args.distributed and args.sync_bn:
@@ -175,14 +175,7 @@ def main(args):
     optimizer = torch.optim.SGD(
         params, lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
 
-    args.lr_scheduler = args.lr_scheduler.lower()
-    if args.lr_scheduler == 'multisteplr':
-        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=args.lr_steps, gamma=args.lr_gamma)
-    elif args.lr_scheduler == 'cosineannealinglr':
-        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
-    else:
-        raise RuntimeError("Invalid lr scheduler '{}'. Only MultiStepLR and CosineAnnealingLR "
-                           "are supported.".format(args.lr_scheduler))
+    lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=args.lr_steps, gamma=args.lr_gamma)
 
     if args.resume:
         checkpoint = torch.load(args.resume, map_location='cpu')
@@ -229,5 +222,5 @@ def main(args):
 
 
 if __name__ == "__main__":
-    args = get_args_parser().parse_args()
+    args = parse_args()
     main(args)
