@@ -59,6 +59,12 @@ class CocoEvaluator(object):
             print("IoU metric: {}".format(iou_type))
             coco_eval.summarize()
 
+    def get_stats(self):
+        stats = {}
+        for iou_type, coco_eval in self.coco_eval.items():
+            stats[iou_type] = coco_eval.stats
+        return stats
+
     def prepare(self, predictions, iou_type):
         if iou_type == "bbox":
             return self.prepare_for_coco_detection(predictions)

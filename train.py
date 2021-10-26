@@ -75,6 +75,7 @@ def parse_args(add_help=True):
                         help='number of total epochs to run')
     parser.add_argument('--start_epoch', default=0, type=int, help='start epoch')
     parser.add_argument('--output-dir', default=None, help='path where to save checkpoints.')
+    parser.add_argument('--target-map', default=None, type=float, help='Stop training when target mAP is reached')
     parser.add_argument('--resume', default='', help='resume from checkpoint')
     parser.add_argument("--pretrained", dest="pretrained", action="store_true", help="Use pre-trained models from the modelzoo")
 
@@ -214,7 +215,10 @@ def main(args):
                 os.path.join(args.output_dir, 'checkpoint.pth'))
 
         # evaluate after every epoch
-        evaluate(model, data_loader_test, device=device, args=args)
+        coco_evaluator = evaluate(model, data_loader_test, device=device, args=args)
+        accuracy = coco_evaluator.get_stats()['bbox'][0]
+        if args.target_map and accuracy >= args.target_map:
+            break
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
