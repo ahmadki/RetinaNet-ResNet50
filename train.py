@@ -102,6 +102,8 @@ def parse_args(add_help=True):
                         help='number of data loading workers (default: 4)')
     parser.add_argument('--print-freq', default=20, type=int, help='print frequency')
     parser.add_argument("--test-only", dest="test_only", action="store_true", help="Only test the model")
+    parser.add_argument('--seed', '-s', type=int, default=random.SystemRandom().randint(0, 2**32 - 1),
+                        help='manually set random seed')
     parser.add_argument('--device', default='cuda', help='device')
 
     # distributed training parameters
@@ -125,9 +127,18 @@ def main(args):
 
     device = torch.device(args.device)
 
+    # set rank seeds according to MLPerf rules
+    if args.distributed:
+        args.seed = utils.broadcast(args.seed, src=1)
+        args.seed = (args.seed + utils.get_rank()) % 2**32
+    torch.manual_seed(args.seed)
+    np.random.seed(seed=args.seed)
+
+    # Print args
+    print(args)
+
     # Data loading code
     print("Loading data")
-
     dataset, num_classes = get_dataset(args.dataset, "train", get_transform(True, args.data_augmentation),
                                        args.data_path)
     dataset_test, _ = get_dataset(args.dataset, "val", get_transform(False, args.data_augmentation), args.data_path)

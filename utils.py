@@ -86,6 +86,23 @@ def all_gather(data):
     return data_list
 
 
+def broadcast(data, src):
+    """
+    Run broadcast on arbitrary picklable data (not necessarily tensors)
+    Args:
+        data: any picklable object
+        src: Source rank from which to broadcast data
+    Returns:
+        list[data]: list of data gathered from each rank
+    """
+    world_size = get_world_size()
+    if world_size == 1:
+        return data
+    data_list = data if isinstance(data, list) else [data]
+    dist.broadcast_object_list(data_list, src=src)
+    return data_list if isinstance(data, list) else data_list[0]
+
+
 def reduce_dict(input_dict, average=True):
     """
     Args:
