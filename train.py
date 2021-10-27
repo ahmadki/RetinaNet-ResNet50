@@ -197,7 +197,7 @@ def main(args):
         args.start_epoch = checkpoint['epoch'] + 1
 
     if args.test_only:
-        evaluate(model, data_loader_test, device=device)
+        evaluate(model, data_loader_test, device=device, args=args)
         return
 
     # GradScaler for AMP

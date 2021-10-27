@@ -2,6 +2,7 @@ Cython>=0.28.4
 scikit-image>=0.15.0
 ujson>=4.0.2
 pycocotools==2.0.0
+git+https://github.com/mlcommons/logging.git
 
 # optional packages used for scripts/parser.py
 pandas==1.3.3
