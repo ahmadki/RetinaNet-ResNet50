@@ -28,10 +28,18 @@ import torch
 import torch.utils.data
 import torchvision
 
-from coco_utils import get_coco
+from mlperf_logging import mllog
+from mlperf_logging.mllog.constants import (SUBMISSION_BENCHMARK, SUBMISSION_DIVISION, SUBMISSION_STATUS,
+    SSD, OPEN, ONPREM, EVAL_ACCURACY, STATUS, SUCCESS, ABORTED,
+    INIT_START, INIT_STOP, RUN_START, RUN_STOP, EPOCH_START, EPOCH_STOP, EVAL_START, EVAL_STOP,
+    SEED, GLOBAL_BATCH_SIZE, TRAIN_SAMPLES, EVAL_SAMPLES, EPOCH_COUNT, FIRST_EPOCH_NUM,
+    OPT_NAME, SGD, OPT_BASE_LR, OPT_WEIGHT_DECAY, OPT_LR_DECAY_FACTOR, OPT_LR_DECAY_STEPS,
+    OPT_LR_WARMUP_EPOCHS, OPT_LR_WARMUP_FACTOR)
+
 
 import utils
 import presets
+from coco_utils import get_coco
 from engine import train_one_epoch, evaluate
 from model.retinanet import (retinanet_resnet50_fpn,
                              retinanet_resnext50_32x4d_fpn)
@@ -73,7 +81,7 @@ def parse_args(add_help=True):
     # Train parameters
     parser.add_argument('--epochs', default=26, type=int, metavar='N',
                         help='number of total epochs to run')
-    parser.add_argument('--start_epoch', default=0, type=int, help='start epoch')
+    parser.add_argument('--start-epoch', default=0, type=int, help='start epoch')
     parser.add_argument('--output-dir', default=None, help='path where to save checkpoints.')
     parser.add_argument('--target-map', default=None, type=float, help='Stop training when target mAP is reached')
     parser.add_argument('--resume', default='', help='resume from checkpoint')
@@ -91,6 +99,10 @@ def parse_args(add_help=True):
                         help='decrease lr every step-size epochs')
     parser.add_argument('--lr-gamma', default=0.1, type=float,
                         help='decrease lr by a factor of lr-gamma')
+    parser.add_argument('--warmup-epochs', default=1, type=int,
+                        help='how long the learning rate will be warmed up in fraction of epochs')
+    parser.add_argument('--warmup-factor', default=1e-3, type=float,
+                        help='factor for controlling warmup curve')
     parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                         help='momentum')
     parser.add_argument('--wd', '--weight-decay', default=1e-4, type=float,
@@ -119,6 +131,15 @@ def parse_args(add_help=True):
 
 
 def main(args):
+    # Setup MLPerf logger
+    mllogger = mllog.get_mllogger()
+
+    # Start MLPerf benchmark
+    mllogger.event(key=SUBMISSION_BENCHMARK, value=SSD)
+    mllogger.event(key=SUBMISSION_DIVISION, value=OPEN)
+    mllogger.event(key=SUBMISSION_STATUS, value=ONPREM)
+    mllogger.start(key=INIT_START)
+
     print(args)
     if args.output_dir:
         utils.mkdir(args.output_dir)
@@ -133,8 +154,13 @@ def main(args):
         args.seed = (args.seed + utils.get_rank()) % 2**32
     torch.manual_seed(args.seed)
     np.random.seed(seed=args.seed)
+    mllogger.event(key=SEED, value=args.seed)
 
     # Print args
+    mllogger.event(key='local_batch_size', value=args.batch_size)
+    mllogger.event(key=GLOBAL_BATCH_SIZE, value=args.batch_size*utils.get_world_size())
+    mllogger.event(key=EPOCH_COUNT, value=args.epochs)
+    mllogger.event(key=FIRST_EPOCH_NUM, value=args.start_epoch)
     print(args)
 
     # Data loading code
@@ -159,6 +185,8 @@ def main(args):
         dataset_test, batch_size=args.eval_batch_size or args.batch_size,
         sampler=test_sampler, num_workers=args.workers,
         collate_fn=utils.collate_fn)
+    mllogger.event(key=TRAIN_SAMPLES, value=len(data_loader))
+    mllogger.event(key=EVAL_SAMPLES, value=len(data_loader_test))
 
     print("Creating model")
     model = None
@@ -186,8 +214,15 @@ def main(args):
     params = [p for p in model.parameters() if p.requires_grad]
     optimizer = torch.optim.SGD(
         params, lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
+    mllogger.event(key=OPT_NAME, value=SGD)
+    mllogger.event(key=OPT_BASE_LR, value=args.lr)
+    mllogger.event(key=OPT_WEIGHT_DECAY, value=args.weight_decay)
 
     lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=args.lr_steps, gamma=args.lr_gamma)
+    mllogger.event(key=OPT_LR_DECAY_FACTOR, value=args.lr_gamma)
+    mllogger.event(key=OPT_LR_DECAY_STEPS, value=args.lr_steps)
+    mllogger.event(key=OPT_LR_WARMUP_EPOCHS, value=args.warmup_epochs)
+    mllogger.event(key=OPT_LR_WARMUP_FACTOR, value=args.warmup_factor)
 
     if args.resume:
         checkpoint = torch.load(args.resume, map_location='cpu')
@@ -197,15 +232,21 @@ def main(args):
         args.start_epoch = checkpoint['epoch'] + 1
 
     if args.test_only:
+        mllogger.start(key=EVAL_START, value=None)
         evaluate(model, data_loader_test, device=device, args=args)
+        mllogger.end(key=EVAL_STOP, value=None)
         return
 
     # GradScaler for AMP
     scaler = torch.cuda.amp.GradScaler(enabled=args.amp)
+    mllogger.end(key=INIT_STOP)
 
     print("Start training")
     start_time = time.time()
+    accuracy = 0
+    mllogger.start(key=RUN_START)
     for epoch in range(args.start_epoch, args.epochs):
+        mllogger.start(key=EPOCH_START, value=epoch)
         if args.distributed:
             train_sampler.set_epoch(epoch)
         train_one_epoch(model, optimizer, scaler, data_loader, device, epoch, args)
@@ -224,17 +265,24 @@ def main(args):
             utils.save_on_master(
                 checkpoint,
                 os.path.join(args.output_dir, 'checkpoint.pth'))
+        mllogger.end(key=EPOCH_STOP, value=epoch)
 
         # evaluate after every epoch
+        mllogger.start(key=EVAL_START, value=epoch)
         coco_evaluator = evaluate(model, data_loader_test, device=device, args=args)
         accuracy = coco_evaluator.get_stats()['bbox'][0]
+        mllogger.event(key=EVAL_ACCURACY, value=accuracy, clear_line=True)
+        mllogger.end(key=EVAL_STOP, value=epoch)
         if args.target_map and accuracy >= args.target_map:
             break
+    mllogger.end(key=RUN_STOP)
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Training time {}'.format(total_time_str))
 
+    if args.target_map:
+        mllogger.event(key=STATUS, value=SUCCESS if accuracy >= args.target_map else ABORTED)
 
 if __name__ == "__main__":
     args = parse_args()
