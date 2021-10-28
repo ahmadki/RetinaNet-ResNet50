@@ -6,3 +6,6 @@ torch-model-cache/
 TODO
 logs/
 
+*.pth
+*.onnx
+
