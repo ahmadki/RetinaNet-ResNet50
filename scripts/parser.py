@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+# TODO(ahmadki): rewrite the parser to use mlperf log lines ?
 import os
 import re
 import argparse

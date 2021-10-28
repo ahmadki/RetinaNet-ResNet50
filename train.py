@@ -17,7 +17,6 @@ from mlperf_logging.mllog.constants import (SUBMISSION_BENCHMARK, SUBMISSION_DIV
     OPT_NAME, SGD, OPT_BASE_LR, OPT_WEIGHT_DECAY, OPT_LR_DECAY_FACTOR, OPT_LR_DECAY_STEPS,
     OPT_LR_WARMUP_EPOCHS, OPT_LR_WARMUP_FACTOR)
 
-
 import utils
 import presets
 from coco_utils import get_coco

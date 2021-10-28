@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 source ./scripts/docker/config.sh
 
-
 DATA_DIR=$1
 RESULTS_DIR=$2
 
