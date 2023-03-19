@@ -1,4 +1,9 @@
 
+# Deprecation notice
+
+This repo has been merged with upstream MLCommons benchmark here: https://github.com/mlcommons/training
+
+-----------------------------------
 # Retinanet-ResNet50
 This is an experimental repository that is based on torchvision's RetinaNet and is used to test and evaluate the model as the new object detection benchmark for MLPerf training and inference.
 
